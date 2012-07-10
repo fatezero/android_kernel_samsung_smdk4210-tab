@@ -1765,7 +1765,12 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 	if (runtime->no_period_wakeup)
 		wait_time = MAX_SCHEDULE_TIMEOUT;
 	else {
-		wait_time = 10;
+		/*
+		 * Modify pcm timeout to 2 secs for avoid ANR
+		 * and execute "Recovery Mode" when I/O Error occured (KOR Only)
+		 * original code: wait_time = 10;
+		 */
+		wait_time = 2;
 		if (runtime->rate) {
 			long t = runtime->period_size * 2 / runtime->rate;
 			wait_time = max(t, wait_time);
