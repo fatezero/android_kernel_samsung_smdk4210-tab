@@ -7579,6 +7579,13 @@ static void intel_sanitize_modesetting(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 reg, val;
+	int i;
+
+	/* Clear any frame start delays used for debugging left by the BIOS */
+	for_each_pipe(i) {
+		reg = PIPECONF(i);
+		I915_WRITE(reg, I915_READ(reg) & ~PIPECONF_FRAME_START_DELAY_MASK);
+	}
 
 	if (HAS_PCH_SPLIT(dev))
 		return;
@@ -8551,6 +8558,18 @@ static void gen6_init_clock_gating(struct drm_device *dev)
 	}
 }
 
+static void gen7_setup_fixed_func_scheduler(struct drm_i915_private *dev_priv)
+{
+	uint32_t reg = I915_READ(GEN7_FF_THREAD_MODE);
+
+	reg &= ~GEN7_FF_SCHED_MASK;
+	reg |= GEN7_FF_TS_SCHED_HW;
+	reg |= GEN7_FF_VS_SCHED_HW;
+	reg |= GEN7_FF_DS_SCHED_HW;
+
+	I915_WRITE(GEN7_FF_THREAD_MODE, reg);
+}
+
 static void ivybridge_init_clock_gating(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -8570,10 +8589,6 @@ static void ivybridge_init_clock_gating(struct drm_device *dev)
 
 	I915_WRITE(ILK_DSPCLK_GATE, IVB_VRHUNIT_CLK_GATE);
 
-	I915_WRITE(IVB_CHICKEN3,
-		   CHICKEN3_DGMG_REQ_OUT_FIX_DISABLE |
-		   CHICKEN3_DGMG_DONE_FIX_DISABLE);
-
 	/* Apply the WaDisableRHWOOptimizationForRenderHang workaround. */
 	I915_WRITE(GEN7_COMMON_SLICE_CHICKEN1,
 		   GEN7_CSC1_RHWO_OPT_DISABLE_IN_RCC);
@@ -8589,12 +8604,10 @@ static void ivybridge_init_clock_gating(struct drm_device *dev)
 			I915_READ(GEN7_SQ_CHICKEN_MBCUNIT_CONFIG) |
 			GEN7_SQ_CHICKEN_MBCUNIT_SQINTMOB);
 
-	for_each_pipe(pipe) {
+	for_each_pipe(pipe)
 		I915_WRITE(DSPCNTR(pipe),
 			   I915_READ(DSPCNTR(pipe)) |
 			   DISPPLANE_TRICKLE_FEED_DISABLE);
-		intel_flush_display_plane(dev_priv, pipe);
-	}
 }
 
 static void g4x_init_clock_gating(struct drm_device *dev)
@@ -8707,6 +8720,8 @@ static void ironlake_teardown_rc6(struct drm_device *dev)
 		drm_gem_object_unreference(&dev_priv->pwrctx->base);
 		dev_priv->pwrctx = NULL;
 	}
+
+	gen7_setup_fixed_func_scheduler(dev_priv);
 }
 
 static void ironlake_disable_rc6(struct drm_device *dev)
